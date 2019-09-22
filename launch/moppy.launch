@@ -1,0 +1,13 @@
+<launch>
+  <node name="moppy" pkg="moppy" type="moppy_node" output="screen" >
+    <param name="characteristic_radius" value="0.9" />
+    <param name="ticks_per_revolution" value="900" />
+    <param name="wheel_diameter" value="0.04" />
+    <param name="serial_device" value="/dev/ttyACM0" />
+    <param name="baud" value="115200" />
+  </node>
+  <node name="teleop" pkg="hardware_abstraction" type="teleop_node" output="screen" >
+    <remap from="teleop/control" to="moppy/control"/>
+  </node>
+  <include file="$(find moppy)/launch/open_loop.xml" />
+</launch>

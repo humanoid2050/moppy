@@ -1,0 +1,22 @@
+<launch>
+  <group ns="teleop">
+    <param name="control_space" value="1" />
+    <group ns="mapping" >
+      <group ns="0" >
+        <param name="joy_channel" value="4" />
+        <param name="scale" value="0.2" />
+        <param name="control_type" value="2" />
+      </group>
+      <group ns="1" >
+        <param name="joy_channel" value="0" />
+        <param name="scale" value="0" />
+        <param name="control_type" value="0" />
+      </group>
+      <group ns="2" >
+        <param name="joy_channel" value="3" />
+        <param name="scale" value="3.14159" />
+        <param name="control_type" value="2" />
+      </group>
+    </group>
+  </group>
+</launch>
