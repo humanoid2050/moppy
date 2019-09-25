@@ -24,12 +24,29 @@ int main(int argc, char **argv)
     double radius;
     double ticks_per_rev;
     double wheel_diameter;
-    n.param("characteristic_radius", radius, 0.09);
+    n.param("characteristic_radius", radius, 0.045);
     n.param("ticks_per_revolution", ticks_per_rev, 900.d);
     n.param("wheel_diameter", wheel_diameter, 0.04);
 
+
     Moppy moppy(device,baud);
     moppy.setHardwareParams(radius, ticks_per_rev, wheel_diameter);
+
+    double P, I, D;
+    n.param("left/P", P, 1.0);
+    n.param("left/I", I, 1.0);
+    n.param("left/D", D, 1.0);
+    moppy.setPIDCoefficients(Moppy::MOTOR::LEFT,P,I,D);
+
+    n.param("right/P", P, 1.0);
+    n.param("right/I", I, 1.0);
+    n.param("right/D", D, 1.0);
+    moppy.setPIDCoefficients(Moppy::MOTOR::RIGHT,P,I,D);
+
+    n.param("lidar/P", P, 1.0);
+    n.param("lidar/I", I, 1.0);
+    n.param("lidar/D", D, 1.0);
+    moppy.setPIDCoefficients(Moppy::MOTOR::LIDAR,P,I,D);
 
     ros::Subscriber sub = n.subscribe("control", 1, &Moppy::onPlatformControl, dynamic_cast<DifferentialDrive*>(&moppy));
 
@@ -45,7 +62,7 @@ int main(int argc, char **argv)
     moppy.setBatteryPublisher(
         [&battery_pub](const float& volts){
             sensor_msgs::BatteryState batt_msg;
-            batt_msg.header = std_msgs::Header();
+            batt_msg.header.stamp = ros::Time::now();
             batt_msg.header.frame_id = "moppy";
             batt_msg.voltage = volts;
             batt_msg.current = NAN;
@@ -64,7 +81,8 @@ int main(int argc, char **argv)
     moppy.setBumperPublisher(
         [&bumper_pub, &odom_br](const std::vector<uint8_t>& switches){
             hardware_abstraction::switch_set bumper_msg;
-            bumper_msg.header = std_msgs::Header();
+            bumper_msg.header.stamp = ros::Time::now();
+            bumper_msg.header.frame_id = "moppy";
             bumper_msg.switch_state = switches;
             bumper_pub.publish(bumper_msg);
         }
@@ -73,7 +91,8 @@ int main(int argc, char **argv)
     moppy.setEdgePublisher(
         [&edge_pub](const std::vector<uint8_t>& switches){
             hardware_abstraction::switch_set edge_msg;
-            edge_msg.header = std_msgs::Header();
+            edge_msg.header.stamp = ros::Time::now();
+            edge_msg.header.frame_id = "moppy";
             edge_msg.switch_state = switches;
             edge_pub.publish(edge_msg);
         }
@@ -90,8 +109,8 @@ int main(int argc, char **argv)
 
             geometry_msgs::TransformStamped odom_trans;
             odom_trans.header.stamp = current_time;
-            odom_trans.header.frame_id = "odom";
-            odom_trans.child_frame_id = "moppy";
+            odom_trans.header.frame_id = "moppy_odom";
+            odom_trans.child_frame_id = "map";
 
             odom_trans.transform.translation.x = pose.x;
             odom_trans.transform.translation.y = pose.y;
@@ -103,7 +122,7 @@ int main(int argc, char **argv)
 
             nav_msgs::Odometry odom;
             odom.header.stamp = current_time;
-            odom.header.frame_id = "odom";
+            odom.header.frame_id = "moppy_odom";
 
             //set the position
             odom.pose.pose.position.x = pose.x;
@@ -112,7 +131,7 @@ int main(int argc, char **argv)
             odom.pose.pose.orientation = tf2::toMsg(q);
 
             //set the velocity
-            odom.child_frame_id = "moppy";
+            odom.child_frame_id = "map";
             odom.twist.twist.linear.x = twist.vx;
             odom.twist.twist.linear.y = twist.vy;
             odom.twist.twist.angular.z = twist.vtheta;

@@ -18,6 +18,15 @@ Moppy::Moppy(const std::string& device, const int& baud) :
     startReadThread();
 }
 
+Moppy::~Moppy()
+{
+    stopReadThread();
+    commandMotorOpenLoop(MOTOR::LEFT,0.0);
+    commandMotorOpenLoop(MOTOR::RIGHT,0.0);
+    commandMotorOpenLoop(MOTOR::LIDAR,0.0);
+    disconnect();
+}
+
 void Moppy::setHardwareParams(const double& radius, const double& ticks_per_rev, const double& wheel_diameter)
 {
     setCharacteristicRadius(radius);
@@ -73,53 +82,46 @@ void Moppy::setMotorMode(const MOTOR& motor, const uint8_t& mode_mask)
 void Moppy::commandMotorOutputs(const std::pair<double,double>& rates) const
 {
     std::cout << "open loop: " << rates.first << " " << rates.second << std::endl;
-    commandMotorOpenLoop(MOTOR::RIGHT,rates.first);
-    commandMotorOpenLoop(MOTOR::LEFT,rates.second);
+    commandMotorOpenLoop(MOTOR::RIGHT, rates.first);
+    commandMotorOpenLoop(MOTOR::LEFT, rates.second);
 }
 
 void Moppy::commandSpeed(const std::pair<double,double>& rates) const
 {
     std::cout << "closed loop speed: " << rates.first << " " << rates.second << std::endl;
-    commandMotorClosedLoop(MOTOR::RIGHT,rates.first/(wheel_diameter_*M_PIl));
-    commandMotorClosedLoop(MOTOR::LEFT,rates.second/(wheel_diameter_*M_PIl));
+    commandMotorClosedLoop(MOTOR::RIGHT, rates.first/(wheel_diameter_*M_PIl));
+    commandMotorClosedLoop(MOTOR::LEFT, rates.second/(wheel_diameter_*M_PIl));
 }
 
 class MotorCmd
 {
 public:
-    MotorCmd(const char& key)
-    {
+    MotorCmd(const char& key) {
         data_[0] = 0xAA;
         setKey(key);
     }
 
-    void setKey(const char& key)
-    {
+    void setKey(const char& key) {
         data_[1] = key;
     }
 
-    void setMotor(const uint8_t& motor)
-    {
+    void setMotor(const uint8_t& motor) {
         data_[2] = motor;
     }
 
-    void setMotor(const Moppy::MOTOR& motor)
-    {
+    void setMotor(const Moppy::MOTOR& motor) {
         data_[2] = uint8_t(motor);
     }
 
-    void setMode(const uint8_t& mode)
-    {
+    void setMode(const uint8_t& mode) {
         data_[3] = mode;
     }
 
-    void setRate(const float& rate)
-    {
+    void setRate(const float& rate) {
         reinterpret_cast<float&>(data_[4]) = rate;
     }
 
-    std::array<uint8_t,8> serialize()
-    {
+    std::array<uint8_t,8> serialize() {
         return data_;
     }
 
@@ -171,14 +173,48 @@ void Moppy::commandMotorClosedLoop(const MOTOR& motor, const float& rate) const
     cmd.setRate(rate);
 
     auto data = cmd.serialize();
-    std::cout << std::hex << std::setw(2);
-    for (const auto& c : data) {
-        std::cout << uint32_t(c) << " ";
-    }
-    std::cout << std::dec << std::setw(0) << std::endl;
     asio::write(serial_port_,asio::buffer(data.data(),data.size()));
 }
 
+class PIDCmd
+{
+public:
+    PIDCmd() {
+        data_[0] = 0xAA;
+        data_[1] = 'C';
+    }
+
+    void setMotor(const uint8_t& motor) {
+        data_[2] = motor;
+    }
+
+    void setMotor(const Moppy::MOTOR& motor) {
+        data_[2] = uint8_t(motor);
+    }
+
+    void setPID(const float& P, const float& I, const float& D) {
+        reinterpret_cast<float&>(data_[3]) = P;
+        reinterpret_cast<float&>(data_[7]) = I;
+        reinterpret_cast<float&>(data_[11]) = D;
+    }
+
+    std::array<uint8_t,15> serialize() {
+        return data_;
+    }
+
+protected:
+    std::array<uint8_t,15> data_;
+
+};
+
+void Moppy::setPIDCoefficients(const MOTOR& motor, const float& P, const float& I, const float& D) const
+{
+    PIDCmd pid;
+    pid.setMotor(motor);
+    pid.setPID(P,I,D);
+    auto data = pid.serialize();
+    asio::write(serial_port_,asio::buffer(data.data(),data.size()));
+}
 
 bool Moppy::connect(const std::string& device, const size_t& baudrate, const double& timeout)
 {
@@ -311,22 +347,25 @@ void Moppy::processOneMessage(const boost::system::error_code& ec, const std::si
     uint32_t elapsed_micros;
     int32_t right_ticks, left_ticks;
     float right_rate, left_rate, batt_voltage;
-    buffer_.sgetn(reinterpret_cast<char*>(&elapsed_micros),sizeof(elapsed_micros));
-    buffer_.sgetn(reinterpret_cast<char*>(&right_ticks),sizeof(right_ticks));
-    buffer_.sgetn(reinterpret_cast<char*>(&left_ticks),sizeof(left_ticks));
+    buffer_.sgetn(reinterpret_cast<char*>(&elapsed_micros), sizeof(elapsed_micros));
+    buffer_.sgetn(reinterpret_cast<char*>(&right_ticks), sizeof(right_ticks));
+    buffer_.sgetn(reinterpret_cast<char*>(&left_ticks), sizeof(left_ticks));
 
     if (right_ticks || left_ticks) {
         auto step = trackDistToMovement(
             right_ticks/ticks_per_rev_*wheel_diameter_*M_PIl ,
-            left_ticks/ticks_per_rev_*wheel_diameter_*M_PIl );
-        accumulator_.increment(elapsed_micros/1e-9, step.first, 0, step.second);
+            left_ticks/ticks_per_rev_*wheel_diameter_*M_PIl );        
+        std::cout << "dist: " << right_ticks/ticks_per_rev_*wheel_diameter_*M_PIl << " " << left_ticks/ticks_per_rev_*wheel_diameter_*M_PIl << std::endl;
+        std::cout << "step: " << elapsed_micros/1e6 << " " << step.first << " " << step.second << std::endl;
+
+        accumulator_.increment(elapsed_micros/1e6, step.first, 0, step.second);
 
         if (odom_handler_) odom_handler_(accumulator_.getPose(),accumulator_.getTwist());
         //buffer_.sgetn(reinterpret_cast<char*>(&right_rate),sizeof(right_rate));
         //buffer_.sgetn(reinterpret_cast<char*>(&left_rate),sizeof(left_rate));
     }
 
-    buffer_.sgetn(reinterpret_cast<char*>(&batt_voltage),sizeof(batt_voltage));
+    buffer_.sgetn(reinterpret_cast<char*>(&batt_voltage), sizeof(batt_voltage));
     if (batt_pub_) batt_pub_(batt_voltage);
 
     std::vector<uint8_t> bump;

@@ -1,10 +1,30 @@
 <launch>
+  <env name="ROS_MASTER_URI" value="http://nanopiduo2:11311"/>
+  <machine name="katana" address="katana" env-loader="/opt/ros/melodic/env.sh" user="humanoid2050"/>
+  <node name="joy" pkg="joy" type="joy_node" machine="katana">
+   <param name="deadzone" value="0.0" />
+   <param name="autorepeat_rate" value="10" />
+  </node>
+
   <node name="moppy" pkg="moppy" type="moppy_node" output="screen" >
-    <param name="characteristic_radius" value="0.9" />
+    <param name="characteristic_radius" value="0.045" />
     <param name="ticks_per_revolution" value="900" />
     <param name="wheel_diameter" value="0.04" />
     <param name="serial_device" value="/dev/ttyACM0" />
     <param name="baud" value="115200" />
+
+    <param name="left/P" value="1.0" />
+    <param name="left/I" value="1.0" />
+    <param name="left/D" value="1.0" />
+
+    <param name="right/P" value="1.0" />
+    <param name="right/I" value="1.0" />
+    <param name="right/D" value="1.0" />
+
+    <param name="lidar/P" value="1.0" />
+    <param name="lidar/I" value="1.0" />
+    <param name="lidar/D" value="1.0" />
+
   </node>
   <node name="teleop" pkg="hardware_abstraction" type="teleop_node" output="screen" >
     <remap from="teleop/control" to="moppy/control"/>

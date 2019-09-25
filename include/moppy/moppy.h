@@ -9,7 +9,7 @@ class Moppy : public DifferentialDrive
 {
 public:
 
-    enum class MOTOR : uint8_t
+    enum MOTOR
     {
         LIDAR = 0,
         RIGHT = 1,
@@ -26,6 +26,7 @@ public:
     };
 
     Moppy();
+    ~Moppy();
 
     Moppy(const std::string& device, const int& baud);
 
@@ -60,7 +61,7 @@ public:
 
     void sendLidarFeedback(const float& speed) const;
 
-    void setPIDCoefficients(const float& P, const float& I, const float& D) const;
+    void setPIDCoefficients(const MOTOR& motor, const float& P, const float& I, const float& D) const;
 
     bool connect(const std::string& device, const size_t& baudrate, const double& timeout = 0.0);
 
